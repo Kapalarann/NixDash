@@ -1,92 +1,75 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class Drag : MonoBehaviour
 {
     [SerializeField] private float timeSlow = 0.2f;
     [SerializeField] private float timeLerpSpeed = 5f;
-
     [SerializeField] private float maxTeleportDistance = 10f;
     [SerializeField] private float forceMultiplier = 5f;
-
-    [SerializeField] float damage = 1f;
+    [SerializeField] private float damage = 1f;
     [SerializeField] private GameObject slashPrefab;
 
     private Camera cam;
     private Rigidbody2D rb;
     private LineRenderer line;
 
-    private Vector3 mouseStart;
-    private Vector3 mouseEnd;
+    private Vector3 inputStart;
+    private Vector3 inputEnd;
     private Vector3 teleportDestination;
 
     private float targetTimeScale = 1f;
     private bool slowingTime = false;
     private bool returningTime = false;
+    private bool isDragging = false;
 
-    void Start()
+    private Vector2 lastInputScreenPosition;
+
+    private void Start()
     {
         cam = Camera.main;
         rb = GetComponent<Rigidbody2D>();
         line = GetComponent<LineRenderer>();
     }
 
-    void Update()
+    private void Update()
     {
-        HandleInput();
+        if (isDragging)
+        {
+            OnDragging();
+        }
+
         UpdateTimeScale();
     }
 
-    private void HandleInput()
+    public void OnPress(InputValue value)
     {
-        // MOUSE INPUT (Right-click)
-        if (Input.GetMouseButtonDown(1))
-            OnDragStart();
-
-        if (Input.GetMouseButton(1))
-            OnDragging();
-
-        if (Input.GetMouseButtonUp(1))
-            OnDragRelease();
-
-        // TOUCH INPUT (Single finger)
-        if (Input.touchCount > 0)
+        if (value.isPressed)
         {
-            Touch touch = Input.GetTouch(0);
-
-            switch (touch.phase)
-            {
-                case TouchPhase.Began:
-                    OnDragStart();
-                    break;
-
-                case TouchPhase.Moved:
-                case TouchPhase.Stationary:
-                    OnDragging();
-                    break;
-
-                case TouchPhase.Ended:
-                case TouchPhase.Canceled:
-                    OnDragRelease();
-                    break;
-            }
+            isDragging = true;
+            inputStart = GetInputWorldPosition();
+            BeginTimeSlow();
+        }
+        else
+        {
+            isDragging = false;
+            TeleportAndPush();
+            ClearLine();
+            ReturnToNormalTime();
         }
     }
 
-
-    private void OnDragStart()
+    public void OnDrag(InputValue value)
     {
-        mouseStart = GetMouseWorldPosition();
-        BeginTimeSlow();
+        lastInputScreenPosition = value.Get<Vector2>();
     }
 
     private void OnDragging()
     {
-        mouseEnd = GetMouseWorldPosition();
+        inputEnd = GetInputWorldPosition();
 
-        // Compute slingshot direction from mouse drag (inverted)
-        Vector3 dragVector = mouseStart - mouseEnd;
+        Vector3 dragVector = inputStart - inputEnd;
         Vector3 direction = dragVector.normalized;
-
         float distance = Mathf.Min(dragVector.magnitude, maxTeleportDistance);
 
         teleportDestination = transform.position + direction * distance;
@@ -94,18 +77,11 @@ public class Drag : MonoBehaviour
         UpdateLine();
     }
 
-    private void OnDragRelease()
+    private Vector3 GetInputWorldPosition()
     {
-        TeleportAndPush();
-        ClearLine();
-        ReturnToNormalTime();
-    }
-
-    private Vector3 GetMouseWorldPosition()
-    {
-        Vector3 pos = cam.ScreenToWorldPoint(Input.mousePosition);
-        pos.z = 0f;
-        return pos;
+        Vector3 worldPos = cam.ScreenToWorldPoint(lastInputScreenPosition);
+        worldPos.z = 0f;
+        return worldPos;
     }
 
     private void TeleportAndPush()
@@ -113,7 +89,6 @@ public class Drag : MonoBehaviour
         Vector3 direction = (teleportDestination - transform.position).normalized;
 
         transform.position = teleportDestination;
-
         rb.linearVelocity = Vector2.zero;
         rb.AddForce(direction * forceMultiplier, ForceMode2D.Impulse);
     }
@@ -128,7 +103,6 @@ public class Drag : MonoBehaviour
     private void ClearLine()
     {
         SpawnSlash();
-
         line.positionCount = 0;
     }
 
@@ -172,5 +146,4 @@ public class Drag : MonoBehaviour
 
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
     }
-
 }
